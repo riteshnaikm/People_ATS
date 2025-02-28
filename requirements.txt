@@ -1,0 +1,7 @@
+flask==2.3.3
+Werkzeug==2.3.7
+google-generativeai==0.3.1
+PyPDF2==3.0.1
+python-docx==0.8.11
+python-dotenv==1.0.0
+pycryptodome=3.21.0
