@@ -1,0 +1,300 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluation History{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Evaluation History</h2>
+    </div>
+    <div class="card-body">
+        {% if evaluations %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Resume</th>
+                            <th>Job Title</th>
+                            <th>Match Score</th>
+                            <th>Missing Keywords</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for evaluation in evaluations %}
+                            <tr>
+                                <td>{{ evaluation.id[:8] }}...</td>
+                                <td>{{ evaluation.filename }}</td>
+                                <td>{{ evaluation.job_title }}</td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar 
+                                            {% if evaluation.rank_score < 50 %}bg-danger
+                                            {% elif evaluation.rank_score < 75 %}bg-warning
+                                            {% else %}bg-success{% endif %}"
+                                            role="progressbar" 
+                                            style="width: {{ evaluation.rank_score }}%;" 
+                                            aria-valuenow="{{ evaluation.rank_score }}" 
+                                            aria-valuemin="0" 
+                                            aria-valuemax="100">{{ evaluation.rank_score }}%</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if evaluation.missing_keywords %}
+                                        {% for keyword in evaluation.missing_keywords %}
+                                            <span class="badge bg-warning keyword-badge">{{ keyword }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-success">None</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ evaluation.evaluated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <button class="btn btn-primary btn-sm view-details" data-id="{{ evaluation.id }}" data-summary="{{ evaluation.profile_summary }}">View Details</button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">No evaluations have been performed yet.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal for evaluation details -->
+<div class="modal fade" id="evaluationModal" tabindex="-1" aria-labelledby="evaluationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="evaluationModalLabel">Evaluation Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h5>Profile Summary</h5>
+                <div id="modalProfileSummary" class="p-3 border rounded bg-light mb-4"></div>
+                
+                <div class="row questions-container">
+                    <div class="col-12">
+                        <h5 class="mb-3">Suggested Interview Questions</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card question-card">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0">Technical Questions</h6>
+                            </div>
+                            <div class="card-body technical-questions" id="modalTechnicalQuestions">
+                                <div class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p>Loading questions...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card question-card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0">Non-Technical Questions</h6>
+                            </div>
+                            <div class="card-body nontechnical-questions" id="modalNontechnicalQuestions">
+                                <div class="text-center">
+                                    <div class="spinner-border text-success" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p>Loading questions...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="feedback-form mt-4 p-3 border rounded bg-light">
+                    <h5>Provide Feedback</h5>
+                    <form id="modalFeedbackForm">
+                        <input type="hidden" id="modalEvaluationId" name="evaluation_id">
+                        <div class="mb-3">
+                            <label for="modalRating" class="form-label">Rating</label>
+                            <div class="star-rating" id="modal-star-rating">
+                                <span class="star" data-value="1">★</span>
+                                <span class="star" data-value="2">★</span>
+                                <span class="star" data-value="3">★</span>
+                                <span class="star" data-value="4">★</span>
+                                <span class="star" data-value="5">★</span>
+                            </div>
+                            <input type="hidden" id="modalRating" name="rating" value="0">
+                        </div>
+                        <div class="mb-3">
+                            <label for="modalComments" class="form-label">Comments</label>
+                            <textarea class="form-control" id="modalComments" name="comments" rows="3" placeholder="Share your thoughts about this evaluation..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="modalSubmitFeedbackBtn">Submit Feedback</button>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        let modalCurrentRating = 0;
+        
+        // Modal star rating functionality
+        $('#modal-star-rating .star').on('mouseover', function() {
+            const value = parseInt($(this).data('value'));
+            for (let i = 1; i <= 5; i++) {
+                if (i <= value) {
+                    $(`#modal-star-rating .star[data-value="${i}"]`).addClass('selected');
+                } else {
+                    $(`#modal-star-rating .star[data-value="${i}"]`).removeClass('selected');
+                }
+            }
+        });
+        
+        $('#modal-star-rating').on('mouseout', function() {
+            for (let i = 1; i <= 5; i++) {
+                if (i <= modalCurrentRating) {
+                    $(`#modal-star-rating .star[data-value="${i}"]`).addClass('selected');
+                } else {
+                    $(`#modal-star-rating .star[data-value="${i}"]`).removeClass('selected');
+                }
+            }
+        });
+        
+        $('#modal-star-rating .star').on('click', function() {
+            modalCurrentRating = parseInt($(this).data('value'));
+            $('#modalRating').val(modalCurrentRating);
+            for (let i = 1; i <= 5; i++) {
+                if (i <= modalCurrentRating) {
+                    $(`#modal-star-rating .star[data-value="${i}"]`).addClass('selected');
+                } else {
+                    $(`#modal-star-rating .star[data-value="${i}"]`).removeClass('selected');
+                }
+            }
+        });
+        
+        // View details button click
+        $('.view-details').on('click', function() {
+            const evalId = $(this).data('id');
+            const summary = $(this).data('summary');
+            
+            // Reset modal
+            modalCurrentRating = 0;
+            $('#modalRating').val(0);
+            $('#modal-star-rating .star').removeClass('selected');
+            $('#modalComments').val('');
+            
+            // Show profile summary
+            $('#modalProfileSummary').text(summary);
+            
+            // Store evaluation ID for feedback
+            $('#modalEvaluationId').val(evalId);
+            
+            // Load interview questions
+            $('#modalTechnicalQuestions, #modalNontechnicalQuestions').html(`
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading questions...</p>
+                </div>
+            `);
+            
+            $.ajax({
+                url: `/get_interview_questions/${evalId}`,
+                type: 'GET',
+                success: function(response) {
+                    // Display technical questions
+                    if (response.technical_questions && response.technical_questions.length > 0) {
+                        let techHtml = '';
+                        response.technical_questions.forEach((question, index) => {
+                            techHtml += `<div class="question-item">
+                                <span class="question-number">${index + 1}.</span> ${question}
+                            </div>`;
+                        });
+                        $('#modalTechnicalQuestions').html(techHtml);
+                    } else {
+                        $('#modalTechnicalQuestions').html('<p class="text-muted">No technical questions available.</p>');
+                    }
+                    
+                    // Display non-technical questions
+                    if (response.nontechnical_questions && response.nontechnical_questions.length > 0) {
+                        let nonTechHtml = '';
+                        response.nontechnical_questions.forEach((question, index) => {
+                            nonTechHtml += `<div class="question-item">
+                                <span class="question-number">${index + 1}.</span> ${question}
+                            </div>`;
+                        });
+                        $('#modalNontechnicalQuestions').html(nonTechHtml);
+                    } else {
+                        $('#modalNontechnicalQuestions').html('<p class="text-muted">No non-technical questions available.</p>');
+                    }
+                },
+                error: function() {
+                    $('#modalTechnicalQuestions, #modalNontechnicalQuestions').html(
+                        '<p class="text-danger">Error loading interview questions.</p>'
+                    );
+                }
+            });
+            
+            // Show modal
+            $('#evaluationModal').modal('show');
+        });
+        
+        // Submit feedback form from modal
+        $('#modalFeedbackForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            if (modalCurrentRating === 0) {
+                alert('Please select a rating before submitting feedback.');
+                return;
+            }
+            
+            const feedbackData = {
+                evaluation_id: $('#modalEvaluationId').val(),
+                rating: modalCurrentRating,
+                comments: $('#modalComments').val()
+            };
+            
+            $('#modalSubmitFeedbackBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...');
+            
+            $.ajax({
+                url: '/feedback',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(feedbackData),
+                success: function(response) {
+                    $('#modalSubmitFeedbackBtn').prop('disabled', false).text('Submit Feedback');
+                    alert('Thank you for your feedback!');
+                    
+                    // Reset form
+                    $('#modalComments').val('');
+                    modalCurrentRating = 0;
+                    $('#modalRating').val(0);
+                    $('#modal-star-rating .star').removeClass('selected');
+                    
+                    // Close modal
+                    $('#evaluationModal').modal('hide');
+                },
+                error: function(xhr) {
+                    $('#modalSubmitFeedbackBtn').prop('disabled', false).text('Submit Feedback');
+                    const errorMsg = xhr.responseJSON && xhr.responseJSON.error 
+                        ? xhr.responseJSON.error 
+                        : 'An error occurred while submitting your feedback.';
+                    alert('Error: ' + errorMsg);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
